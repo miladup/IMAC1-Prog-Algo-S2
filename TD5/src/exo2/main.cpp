@@ -155,6 +155,67 @@ WalkResult simulate_guard(Input_Map const& map) {
 
 // QUESTION 4
 
+struct GuardState {
+    Position pos;
+    Direction dir;
+
+    bool operator==(GuardState const& other) const {
+        return pos == other.pos && dir == other.dir;
+    }
+};
+
+namespace std {
+    template <>
+    struct hash<GuardState> {
+        std::size_t operator()(const GuardState& s) const {
+            return std::hash<Position>{}(s.pos) ^ (std::hash<int>{}(static_cast<int>(s.dir)) << 16);
+        }
+    };
+}
+
+bool predict_loop(Input_Map const& map) {
+    Position current_pos = map.start_pos;
+    Direction current_dir = map.start_dir;
+    
+    std::unordered_set<GuardState> history;
+
+    while (true) {
+        if (history.count({current_pos, current_dir})) {
+            return true;
+        }
+        history.insert({current_pos, current_dir});
+
+        Position next_pos = current_pos + current_dir;
+
+        if (next_pos.x < 0 || next_pos.x >= map.width || 
+            next_pos.y < 0 || next_pos.y >= map.height) {
+            return false;
+        }
+
+        if (is_obstacle(next_pos, map.filled_positions)) {
+            current_dir = turn_right(current_dir);
+        } else {
+            current_pos = next_pos;
+        }
+    }
+}
+
+int count_loops(Input_Map const& base_map, std::unordered_set<Position> const& original_path) {
+    int loops_found = 0;
+
+    for (Position const& p : original_path) {
+        if (p == base_map.start_pos) continue;
+
+        Input_Map modified_map = base_map;
+        modified_map.filled_positions.insert(p);
+
+        if (predict_loop(modified_map)) {
+            loops_found++;
+        }
+    }
+    return loops_found;
+}
+
 int main() {
 
     // QUESTION 1
@@ -211,10 +272,27 @@ int main() {
 
     std::ifstream file("input_guard_patrol.txt"); 
     if (file.is_open()) {
-    data = parse_input(file);
-    result = simulate_guard(data);
-    std::cout << "RESULTAT FINAL : " << result.visited_positions.size() << std::endl;
-}
+        data = parse_input(file);
+        result = simulate_guard(data);
+        std::cout << "RESULTAT FINAL : " << result.visited_positions.size() << std::endl;
+
+        // QUESTION 4 (nb boucles)
+        std::cout << "Calcul des boucles :" << std::endl;
+        int loops_found = 0;
+        
+        for (Position const& p : result.visited_positions) {
+            if (p == data.start_pos) continue;
+
+            Input_Map modified_map = data;
+            modified_map.filled_positions.insert(p);
+
+            if (predict_loop(modified_map)) {
+                loops_found++;
+            }
+        }
+
+        std::cout << "Nombre de boucles possibles : " << loops_found << std::endl;
+    }
 
     return 0;
 }
